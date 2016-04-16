@@ -649,8 +649,37 @@ class PlotDataItem(GraphicsObject):
         self.curve.setData([])
         self.scatter.setData([])
             
-    def appendData(self, *args, **kargs):
-        pass
+    def appendData(self, data, density):
+        self.yData = np.append(self.yData, data[0])
+        self.xData = np.append(self.xData, data[1])
+
+        self.xDisp = np.append(self.xDisp, self.xDisp[-1] + 1*density)
+        self.yDisp = self.yData
+
+        print('='*80)
+        print(self.xDisp)
+        print('='*80)
+        print(self.yDisp)
+        print('='*80)
+
+        self.updateItems()
+
+        self.informViewBoundsChanged()
+        
+        self.sigPlotChanged.emit(self)
+
+    def popData(self, *args, **kargs):
+        self.yData = np.delete(self.yData, 0)
+        self.xData = np.delete(self.xData, 0)
+
+        self.xDisp = np.delete(self.xDisp, 0)
+        self.yDisp = self.yData
+
+        self.updateItems()
+
+        self.informViewBoundsChanged()
+        
+        self.sigPlotChanged.emit(self)
     
     def curveClicked(self):
         self.sigClicked.emit(self)

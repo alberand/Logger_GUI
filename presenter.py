@@ -29,12 +29,6 @@ class Presenter:
             time.sleep(0.5)
             self.__view.close()
 
-        elif command == 'update':
-            # Test. It should not be there
-            # self.__view.plot.addValue(randint(1, 10))
-            self.__view.plot.update()
-            # self.__model.update()
-
         elif command == 'start_model':
             print('Start model signal received.')
             self.__model.start()

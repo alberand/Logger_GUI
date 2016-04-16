@@ -7,10 +7,16 @@ import queue
 import struct
 import socket
 import select
+import pickle
+import datetime
+import os
 from random import randint
 
 import numpy as np
 from PySide.QtCore import QThread, Signal
+
+from utils import calculateDensity
+from settings import config
 
 class Model(QThread):
 
@@ -24,23 +30,25 @@ class Model(QThread):
         self.queue = queue.Queue()
 
         # If we have internet connetction we can receive dat from server
-        self.data_from_server = False
+        self.data_from_server = True
 
         # Offsets period
-        self.p_offsets = 1
+        self.p_offsets = 5
         # Offsets stack size
-        self.n_samples = 5
+        self.n_samples = 1500
+        # Offsets list
+        self.offsets = None
 
         # Socket
         self.sock_con = None
 
         # Graph density. Send to pipeline every n-th sample
-        # self.density = self.calculateDensity(1) 
+        self.density = calculateDensity(config['time_axe_range']) # self.calculateDensity(2) 
 
         # Data server
         if self.data_from_server:
-            # self.host = '188.244.51.15'
-            self.host = 'localhost'
+            self.host = '188.244.51.15'
+            # self.host = 'localhost'
             self.port = 5000
 
 
@@ -56,57 +64,66 @@ class Model(QThread):
 
         samples_list = []
         i = 0
-        # j = 0
+        j = 0
+
+        offsets_save_time = datetime.datetime.now()
 
         # Start main loop
         while self.running:
             if not self.queue.full():
-                # Get data from socket and put it in the queue.
-                if self.data_from_server:
-                    sample = self.getDataFromSocket(self.sock_con)
-                    if not sample:
-                        continue
-                else:
-                    sample = np.array([
-                        randint(1000,1010), randint(2000,2010), 
-                        randint(3000,3010)
-                    ])
+                # Get sample
+                sample = self.getSample()
+                if not sample:
+                    continue
                 
                 # Choose all values except date
                 sample = [value for value in sample[0:3]]
-                print('Sample number ' + str(i) + ' is ' + str(sample))
                 i += 1
 
-                # If we haven't enough samples continue add them to list
-                if len(samples_list) < self.n_samples:
-                    samples_list.append(sample)
-                    continue
-                # Else calculate offsets
-                else:
-                    offsets = self.calculateOffsets(samples_list)
-                    print('Offstes is ' + str(
-                                [value/self.n_samples for value in offsets]
-                            )
-                    )
+                print('Sample number ' + str(i) + ' is ' + str(sample))
 
-                # If it's n-th sample add it (period)
-                if i % self.p_offsets == 0:
-                    print('i is equal to ' + str(i) + '. And we call recalculation for offsets.')
+                # Density. If we take only n-th sample continue
+                j += 1
+                if j % self.density != 0:
+                    continue
+
+                # If we haven't enough samples continue add them to list
+                if not self.offsets:
+                    try_load_offsets = self.loadOffsets()
+                    if not try_load_offsets:
+                        print('Fail to load offsets from file.')
+                        if len(samples_list) < self.n_samples:
+                            print('There now enough sample in list for \
+                                    calculating offsets. Add new sample and \
+                                    continue.')
+                            samples_list.append(sample)
+                            continue
+                        # Else calculate offsets
+                        else:
+                            self.offsets = [value/self.n_samples for value in 
+                                    self.calculateOffsets(samples_list)]
+                            print('Offstes is ' + str(self.offsets))
+                            self.saveOffsets(self.offsets)
+                    else:
+                        self.offsets = try_load_offsets
+                self.offsets_ready.emit(self.offsets)
+
+
+                # Add new sample to the list for calculating offsets
+                if len(samples_list) > self.n_samples:
                     samples_list.pop()
                     samples_list.insert(0, sample)
-                    offsets = self.calculateOffsets(samples_list)
+
+                # If it's new day than recalculate offsets
+                if datetime.datetime.now().day > offsets_save_time.day:
+                    self.offsets = [value/self.n_samples for value in 
+                            self.calculateOffsets(samples_list)]
                     # Emit signal that offsets are ready
-                    self.offsets_ready.emit(offsets)
-
-
-                # Density.
-                # j += 1
-                # if j % self.density != 0:
-                    # continue
+                    self.offsets_ready.emit(self.offsets)
+                    offsets_save_time = datetime.datetime.now()
 
                 # Substract offsets from sample
-                data = [a - b/self.n_samples 
-                        for a, b in zip(sample, offsets) ]
+                data = [a - b for a, b in zip(sample, self.offsets)]
 
                 # Add date to data
                 data.append(time.time())
@@ -117,6 +134,18 @@ class Model(QThread):
 
             time.sleep(0.5)
         self.running = True
+
+    def getSample(self):
+        # Get data from socket and put it in the queue.
+        if self.data_from_server:
+            sample = self.getDataFromSocket(self.sock_con)
+        else:
+            sample = np.array([
+                randint(0,1010), randint(2000,2010), 
+                randint(3000,3010)
+            ])
+
+        return sample
 
     def calculateOffsets(self, samples_list):
         """
@@ -159,7 +188,11 @@ class Model(QThread):
         if not data:
             return None
         else:
-            return self.formatData(data)
+            res =  self.formatData(data)
+            if res:
+                return res
+            else: 
+                return None
 
     def formatData(self, data):
         '''
@@ -173,8 +206,11 @@ class Model(QThread):
             [12345, 12345, 12345, 12345] list with integer values.
         '''
         data = data.decode('UTF-8')
-        print('Received data ' + str([float(value) for value in data.split(';')]))
-        return [float(value) for value in data.split(';')]
+        print('Received data ' + str(data.split('\r')))
+        try:
+            return [int(value) for value in data.split('\r')[1:-1]]
+        except Exception:
+            return None
 
     def connect_to_server(self):
         '''
@@ -204,6 +240,7 @@ class Model(QThread):
         Stop while loop in 'self.run' function.
         '''
         print('Call stop thread function.')
+        self.sock_con.close()
         self.running = False
 
     def getQueue(self):
@@ -212,3 +249,20 @@ class Model(QThread):
             quqeue.queue: Queue which is used to send data for plotting.
         '''
         return self.queue
+
+    def saveOffsets(self, data):
+        print('Save offsets.')
+        with open(config['off_filename'], 'w+b') as f:
+                pickle.dump(data, f)
+
+    def loadOffsets(self):
+        print('Load offsets.')
+        result = list()
+        if os.path.exists(config['off_filename']):
+            with open(config['off_filename'], 'r+b') as f:
+                    result = pickle.load(f)
+        else:
+            return None
+
+        print('Result of loading offsets is ' + str(result))
+        return result

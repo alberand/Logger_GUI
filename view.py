@@ -13,7 +13,6 @@ from plot_ui import Plot
 
 app = pg.mkQApp()
 
-
 class View(QtGui.QWidget):
 
     # Test signal for buttons
@@ -29,7 +28,6 @@ class View(QtGui.QWidget):
         self.grid = QtGui.QGridLayout()
 
         self.initScene()
-        # self.initToolbar()
 
         self.setLayout(self.grid)
         self.layout().setSpacing(0)
@@ -61,25 +59,6 @@ class View(QtGui.QWidget):
         self.plot.layout().setContentsMargins(0,0,0,0);
 
         self.grid.addWidget(self.plot, 1, 0)
-
-    def initToolbar(self):
-        '''
-        Initialize toolbar.
-        '''
-        toolBar = QtGui.QToolBar(self)
-
-        updateAction = toolBar.addAction('Update')
-        updateAction.triggered.connect(
-            lambda: self.emitSignal('update', 'title')
-        )
-
-        quitAction = toolBar.addAction('Quit')
-        quitAction.triggered.connect(
-            lambda: self.emitSignal('quit', 'title')
-        )
-
-
-        self.grid.addWidget(toolBar, 0, 0)
 
     #==========================================================================
     # Functionality 
@@ -116,10 +95,3 @@ class View(QtGui.QWidget):
         '''
         self.emitSignal('quit', 'title')
         event.accept()
-
-if __name__ == '__main__':
-    # app = QtGui.QApplication(sys.argv)
-    tmp = View()
-
-    tmp.show()
-    sys.exit(app.exec_())
