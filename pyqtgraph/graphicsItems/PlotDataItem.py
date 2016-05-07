@@ -656,11 +656,11 @@ class PlotDataItem(GraphicsObject):
         self.xDisp = np.append(self.xDisp, self.xDisp[-1] + 1*density)
         self.yDisp = self.yData
 
-        print('='*80)
-        print(self.xDisp)
-        print('='*80)
-        print(self.yDisp)
-        print('='*80)
+        # print('='*80)
+        # print(self.xDisp)
+        # print('='*80)
+        # print(self.yDisp)
+        # print('='*80)
 
         self.updateItems()
 

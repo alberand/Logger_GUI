@@ -17,19 +17,7 @@ class TimeAxisItem(pg.AxisItem):
         self.init_time = datetime.datetime.now()
     
     def tickStrings(self, values, scale, spacing):
-        result = list()
         size = len(values)
-        # print(values)
-        # for i in range(len(values)):
-            # c_time = datetime.datetime.now() - datetime.timedelta(
-                    # seconds=values[int(size - i - 1)])
-            # result.append(
-                    # datetime.datetime.fromtimestamp(
-                            # time.mktime(c_time.timetuple())
-                    # ).strftime('%H:%M:%S')
-            # )
-
-        # return result
         result = list()
         for i, value in enumerate(values):
             c_time = self.init_time + datetime.timedelta(
@@ -37,7 +25,7 @@ class TimeAxisItem(pg.AxisItem):
             result.append(
                     datetime.datetime.fromtimestamp(
                             time.mktime(c_time.timetuple())
-                    ).strftime('%H:%M:%S')
+                    ).strftime(config['time_format'])
             )
 
         return result
@@ -90,25 +78,20 @@ class Plot(QtGui.QWidget):
         autoRangeBtn.move(x + 50, 130)
 
         # Connect buttons to slots
-        zoomInBtn.clicked.connect(
-                self.zoomIn
-        )
-        zoomOutBtn.clicked.connect(
-                self.zoomOut
-        )
-        autoRangeBtn.clicked.connect(
-                self.autoPan
-        )
+        zoomInBtn.clicked.connect(self.zoomIn)
+        zoomOutBtn.clicked.connect(self.zoomOut)
+        autoRangeBtn.clicked.connect(self.autoPan)
 
         # Add plot elements
-        self.h = self.plot.plot(pen='r', name='Red plot ', clipToView=True,
-                autoDownsample=True)
+        self.h = self.plot.plot(pen='r', name='Offset is 0.00e0', 
+                clipToView=True, autoDownsample=True)
+        self.z = self.plot.plot(pen='g', name='Offset is 0.00e0', 
+                clipToView=True, autoDownsample=True)
+        self.y = self.plot.plot(pen='b', name='Offset is 0.00e0', 
+                clipToView=True, autoDownsample=True)
+
         self.h.setData(x=[0.0], y=[0.0])
-        self.z = self.plot.plot(pen='g', name='Green plot ', clipToView=True,
-                autoDownsample=True)
         self.z.setData(x=[0.0], y=[0.0])
-        self.y = self.plot.plot(pen='b', name='Blue plot ', clipToView=True,
-                autoDownsample=True)
         self.y.setData(x=[0.0], y=[0.0])
 
         __layout.addWidget(self.plot)
@@ -117,17 +100,6 @@ class Plot(QtGui.QWidget):
         '''
         Update plot widget. Plotted data can be changed by 'addValue' function.
         '''
-        # x_axe = [item[3] for item in self.x_array], 
-        # self.h.setData(
-                # x=x_axe[0],
-                # y=[item[0] for item in self.x_array])
-        # self.z.setData(
-                # x=x_axe[0],
-                # y=[item[1] for item in self.x_array])
-        # self.y.setData(
-                # x=x_axe[0],
-                # y=[item[2] for item in self.x_array])
-        print(self.x_array[-1][3])
         self.h.appendData([self.x_array[-1][0], self.x_array[-1][3]],
                 self.density)
         self.z.appendData([self.x_array[-1][1], self.x_array[-1][3]],
@@ -159,9 +131,6 @@ class Plot(QtGui.QWidget):
             self.h.popData()
             self.y.popData()
             self.z.popData()
-            # self.h.clear()
-            # self.z.clear()
-            # self.y.clear()
             self.x_array.pop(0)
 
     def calculateStackSize(self, hours):
@@ -174,36 +143,41 @@ class Plot(QtGui.QWidget):
             Integer value which show that we need every n-th sample
         '''
         result =  hours*3600
-        if result > 700:
-            return 700
+        if result > config['min_stack_size']:
+            return config['min_stack_size']
         else:
             return result
-        # result = hours*3600/800
 
     def autoPan(self):
+        '''
+        Turn on/off between auto moving pan and static pan.
+        '''
         self.auto_pan = not self.auto_pan
 
     def zoomIn(self):
-        # sizes = self.plot.viewRange()[0]
-        # dif = sizes[1] - sizes[0]
-        # self.plot.setXRange(sizes[0] + dif/10, sizes[1] - dif/10)
-
+        '''
+        This function is used to increase stack_size which 
+        '''
         self.stack_size -= int(self.stack_size/10)
         self.plot.autoRange(padding=0)
 
     def zoomOut(self):
-        # sizes = self.plot.viewRange()[0]
-        # dif = sizes[1] - sizes[0]
-        # self.plot.setXRange(sizes[0] - dif/10, sizes[1] + dif/10)
-
+        '''
+        This function is used to decrease stack_size 
+        '''
         self.stack_size += int(self.stack_size/10) or 1
         self.plot.autoRange(padding=0)
 
 
     def setLegends(self, offsets):
+        '''
+        Update legengs for plots using value from list 'offsets'.
+        Args:
+            offsets: list with offsets value for every plot.
+        '''
         l_items = self.plot.getPlotItem().legend.items
         for i, item in enumerate(l_items):
-            item[1].setText("Offset is " + str(offsets[i]))
+            item[1].setText("Offset is {:8.2f} nT".format(offsets[i]*1e9))
 
     def clear(self):
         '''

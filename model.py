@@ -33,9 +33,9 @@ class Model(QThread):
         self.data_from_server = True
 
         # Offsets period
-        self.p_offsets = 5
+        self.p_offsets = config['p_offsets']
         # Offsets stack size
-        self.n_samples = 1500
+        self.n_samples = config['o_buffer']
         # Offsets list
         self.offsets = None
 
@@ -47,9 +47,9 @@ class Model(QThread):
 
         # Data server
         if self.data_from_server:
-            self.host = '188.244.51.15'
+            self.host = config['host']
             # self.host = 'localhost'
-            self.port = 5000
+            self.port = config['port']
 
 
     def run(self):
@@ -82,20 +82,16 @@ class Model(QThread):
 
                 print('Sample number ' + str(i) + ' is ' + str(sample))
 
-                # Density. If we take only n-th sample continue
-                j += 1
-                if j % self.density != 0:
-                    continue
-
                 # If we haven't enough samples continue add them to list
+                print(self.offsets)
                 if not self.offsets:
                     try_load_offsets = self.loadOffsets()
                     if not try_load_offsets:
                         print('Fail to load offsets from file.')
                         if len(samples_list) < self.n_samples:
-                            print('There now enough sample in list for \
-                                    calculating offsets. Add new sample and \
-                                    continue.')
+                            print('There now enough sample in list for' +
+                                    'calculating offsets. Add new sample and' + 
+                                    'continue.')
                             samples_list.append(sample)
                             continue
                         # Else calculate offsets
@@ -108,14 +104,23 @@ class Model(QThread):
                         self.offsets = try_load_offsets
                 self.offsets_ready.emit(self.offsets)
 
+                # Density. If we take only n-th sample continue
+                j += 1
+                if j % self.density != 0:
+                    continue
 
+
+                if len(samples_list) < self.n_samples:
+                    samples_list.append(sample)
                 # Add new sample to the list for calculating offsets
                 if len(samples_list) > self.n_samples:
                     samples_list.pop()
                     samples_list.insert(0, sample)
 
                 # If it's new day than recalculate offsets
-                if datetime.datetime.now().day > offsets_save_time.day:
+                if datetime.datetime.now().day > offsets_save_time.day and \
+                        len(samples_list) >= self.n_samples:
+                    print('Day offset update.')
                     self.offsets = [value/self.n_samples for value in 
                             self.calculateOffsets(samples_list)]
                     # Emit signal that offsets are ready
@@ -132,8 +137,8 @@ class Model(QThread):
                 # Emit signal that data is ready.
                 self.data_ready.emit()
 
-            time.sleep(0.5)
-        self.running = True
+            # time.sleep(0.5)
+        # self.running = True
 
     def getSample(self):
         # Get data from socket and put it in the queue.
@@ -142,7 +147,7 @@ class Model(QThread):
         else:
             sample = np.array([
                 randint(0,1010), randint(2000,2010), 
-                randint(3000,3010)
+                randint(3000,3010), randint(0, 100)
             ])
 
         return sample
@@ -171,13 +176,19 @@ class Model(QThread):
         '''
         data = None
         if s:
+            data = b''
             try:
-                s.send(b's')
-                data = s.recv(67) # 54
+                s.send(b's\n')
+                # data = s.recv(config['data_l']) # 54
+                sym = s.recv(1)
+                while sym != '\n':
+                    data += sym
+                    sym = s.recv(1)
             except socket.timeout:
                 print('Socket timeout while received sample.')
             except Exception as e:
                 print('Broken pipe occured. Try to open new connection.')
+                print(e)
                 self.sock_con.close()
                 self.sock_con = None
                 self.connect_to_server()
@@ -205,10 +216,11 @@ class Model(QThread):
         Return:
             [12345, 12345, 12345, 12345] list with integer values.
         '''
-        data = data.decode('UTF-8')
-        print('Received data ' + str(data.split('\r')))
+        data = data.decode('ascii')
+        print('Received data ' + str(data.split(';')))
         try:
-            return [int(value) for value in data.split('\r')[1:-1]]
+            return [float(value) for value in data.split(';')]
+            # return [int(value) for value in data.split('\r')[1:-1]]
         except Exception:
             return None
 
@@ -228,7 +240,7 @@ class Model(QThread):
 
                     # Set non-blocking mode and 5 seconds timeout
                     self.sock_con.setblocking(False)
-                    self.sock_con.settimeout(5)
+                    self.sock_con.settimeout(1)
 
                     connected = True
                 except (OSError, socket.error):
@@ -240,7 +252,9 @@ class Model(QThread):
         Stop while loop in 'self.run' function.
         '''
         print('Call stop thread function.')
-        self.sock_con.close()
+        if self.data_from_server:
+            self.sock_con.close()
+
         self.running = False
 
     def getQueue(self):

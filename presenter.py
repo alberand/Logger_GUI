@@ -26,8 +26,7 @@ class Presenter:
     def processSignal(self, command, value):
         if command == 'quit':
             self.__model.stop()
-            time.sleep(0.5)
-            self.__view.close()
+            # self.__view.close()
 
         elif command == 'start_model':
             print('Start model signal received.')

@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import sys
+import time
 
 import numpy as np
 import pyqtgraph as pg
@@ -94,4 +95,5 @@ class View(QtGui.QWidget):
         Proceed close event.
         '''
         self.emitSignal('quit', 'title')
+        time.sleep(0.1)
         event.accept()
